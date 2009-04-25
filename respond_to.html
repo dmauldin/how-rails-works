@@ -7,51 +7,94 @@ I've tried to make all the methods in this guide clickable with links to the sou
 
 Firstly I'll talk about <a href='http://en.wikipedia.org/wiki/MIME_type'>MIME types</a> in Rails.
 
-The default MIME types are loaded when Rails starts up by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_type.rb#L212'>the final line in <em>actionpack/lib/action_controller/mime_type.rb</em>. This loads the <em><a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_types.rb#L4-21'>actionpack/lib/action_controller/mime_types.rb</a></em> file and registers the default MIME types.
+The default MIME types are loaded when Rails starts up by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_type.rb#L212'>the final line in <em>actionpack/lib/action_controller/mime_type.rb</em>:
 
-You may recognise the syntax used in <em>mime_types.rb</em> from your app's <em>config/initializers/mime_types.rb</em>. This file is used to define new MIME types for your application and is loaded on initialization of your application by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/railties/lib/initializer.rb#L174'>this line</a> and  <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/railties/lib/initializer.rb#L597-603'>the corresponding <span class='term'>load_application_initializers</span> method</a> which is responsible for loading all your application's initializers, including <em>mime_types.rb</em>.
+<pre>
+require 'action_controller/mime_types'
+</pre>
+  
+This loads the <em><a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_types.rb#L4-21'>actionpack/lib/action_controller/mime_types.rb</a></em> file and registers the default MIME types:
+
+<pre>
+Mime::Type.register "*/*", :all
+Mime::Type.register "text/plain", :text, [], %w(txt)
+Mime::Type.register "text/html", :html, %w( application/xhtml+xml ), %w( xhtml )
+Mime::Type.register "text/javascript", :js, %w( application/javascript application/x-javascript )
+Mime::Type.register "text/css", :css
+Mime::Type.register "text/calendar", :ics
+Mime::Type.register "text/csv", :csv
+Mime::Type.register "application/xml", :xml, %w( text/xml application/x-xml )
+Mime::Type.register "application/rss+xml", :rss
+Mime::Type.register "application/atom+xml", :atom
+Mime::Type.register "application/x-yaml", :yaml, %w( text/yaml )
+
+Mime::Type.register "multipart/form-data", :multipart_form
+Mime::Type.register "application/x-www-form-urlencoded", :url_encoded_form
+
+# http://www.ietf.org/rfc/rfc4627.txt
+# http://www.json.org/JSONRequest.html
+Mime::Type.register "application/json", :json, %w( text/x-json application/jsonrequest )  
+</pre>
+  
+
+You may recognise the syntax used in <em>mime_types.rb</em> from your app's <em>config/initializers/mime_types.rb</em>. This file is used to define new MIME types for your application and is loaded on initialization of your application by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/railties/lib/initializer.rb#L174'>this line in initializer.rb</a>
+
+<pre>load_application_initializers</pre>
+
+and <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/railties/lib/initializer.rb#L597-603'>the corresponding <span class='term'>load_application_initializers</span> method</a>:
+ 
+<pre>
+def load_application_initializers
+  if gems_dependencies_loaded
+    Dir["#{configuration.root_path}/config/initializers/**/*.rb"].sort.each do |initializer|
+      load(initializer)
+    end
+  end
+end
+</pre>
+  
+which is responsible for loading all your application's initializers, including <em>config/initializers/mime_types.rb</em>.
 
 When you call <span class='term'>respond_to</span> in your controller like this:
 
 <pre lang='rails'>
-  def index
-     @blogs = Blog.all
-     respond_to do |format|
-       format.html
-       format.xml
-     end
-  end    
+def index
+  @blogs = Blog.all
+  respond_to do |format|
+    format.html
+    format.xml
+  end
+end    
 </pre>
 
 or in the non-block syntax:
 
 <pre lang='rails'>
-  def index
-     @blogs = Blog.all
-     respond_to :html, :xml
-  end    
+def index
+  @blogs = Blog.all
+  respond_to :html, :xml
+end    
 </pre>
 
 The MIME types defined by Rails and your initializers are the methods that you call on the block object <span class='term'>format</span> or the symbols that you pass to respond_to. You may recognise these from the symbols passed to the <span class='term'>Mime::Type.register</span> calls earlier.
 
-<span class='term'>respond_to</span>'s code may look a bit intimidating at first but it's not really all that bad:
+<a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_responds.rb#L102-109'><span class='term'>respond_to</span></a>'s code may look a bit intimidating at first but it's not really all that bad:
 
 <pre>
-      def respond_to(*types, &amp;block)
-        raise ArgumentError, "respond_to takes either types or a block, never both" unless types.any? ^ block
-        block ||= lambda { |responder| types.each { |type| responder.send(type) } }
-        responder = Responder.new(self)
-        block.call(responder)
-        responder.respond
-      end
-    end
+def respond_to(*types, &amp;block)
+  raise ArgumentError, "respond_to takes either types or a block, never both" unless types.any? ^ block
+  block ||= lambda { |responder| types.each { |type| responder.send(type) } }
+  responder = Responder.new(self)
+  block.call(responder)
+  responder.respond
+end
 </pre>
 
 If we use the block syntax this will just <span class='term'>call</span> the <span class='term'>block</span> object with the argument of <span class='term'>responder</span> which is defined as <span class='term'>Responder.new</span>.
 
 If we use the single line syntax. this will just pass in the types as an array. This method then defines a <span class='term'>lambda</span> which is a <span class='term'>Proc</span> object just like a usual block. This takes one argument, called <span class='term'>responder</span> and then calls the types on the responder object.
 
-The <span class='term'>||=</span> on the block definition means "set this variable only if it hasn't been set already". The next line is defining the <span class='term'>responder</span> object which triggers the following:
+The <span class='term'>||=</span> on the block definition means "set this variable only if it hasn't been set already". The next line is defining the <span class='term'>responder</span> object which triggers <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_responds.rb#L102-109'><span class='term'>initialize</span> method for <span class='term'>Responder</span></a>:
 
 <pre>
 class Responder
@@ -69,7 +112,7 @@ class Responder
     @order     = []
     @responses = {}
   end
-   ...
+  ...
 end
 </pre>
 
@@ -83,7 +126,13 @@ def lookup_by_extension(extension)
 end
 </pre>
 
-<span class='term'>EXTENSION_LOOKUP</span> is <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/mime_type.rb#L5'>defined on line #5 of mime_type.rb</a> as a hash. What happens when a key is looked for on this hash it calls <span class='term'>Mime::Type.new(key)</span> which calls the <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/mime_type.rb#L147-150'><span class='term'>initialize</span></a> method for <span class='term'>Mime::Type</span>:
+<span class='term'>EXTENSION_LOOKUP</span> is <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/mime_type.rb#L5'>defined on line #5 of mime_type.rb</a> as a hash:
+
+<pre>
+EXTENSION_LOOKUP = Hash.new { |h, k| h[k] = Type.new(k) unless k.blank? }
+</pre>  
+
+ What happens when a key is looked for on this hash it calls <span class='term'>Mime::Type.new(key)</span> which calls the <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/mime_type.rb#L147-150'><span class='term'>initialize</span></a> method for <span class='term'>Mime::Type</span>:
 
 <pre>
 def initialize(string, symbol = nil, synonyms = [])
