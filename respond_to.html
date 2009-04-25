@@ -1,4 +1,5 @@
-<strong>FIRST DRAFT</strong>
+<strong>THIRD DRAFT</strong>
+ <a href='http://github.com/radar/how-rails-works'>This guide is available on Github</a>
 
 Welcome to yet another guide on my series which I've now named "How Rails Works". My first post in this series was my Timezone Overview for Rails 2.2. Today I would like to cover how mime types and <span class='term'>respond_to</span> work in Rails 2.3. The reason I choose both of these instead of just <span class='term'>respond_to</span> is because they tie in close together. 
 
@@ -36,7 +37,7 @@ The MIME types defined by Rails and your initializers are the methods that you c
 <span class='term'>respond_to</span>'s code may look a bit intimidating at first but it's not really all that bad:
 
 <pre>
-      def respond_to(*types, &block)
+      def respond_to(*types, &amp;block)
         raise ArgumentError, "respond_to takes either types or a block, never both" unless types.any? ^ block
         block ||= lambda { |responder| types.each { |type| responder.send(type) } }
         responder = Responder.new(self)
@@ -123,9 +124,9 @@ This method iterates over <span class='term'>@mime_type_priority</span> and then
 def self.generate_method_for_mime(mime)
   sym = mime.is_a?(Symbol) ? mime : mime.to_sym
   const = sym.to_s.upcase
-  class_eval <<-RUBY, __FILE__, __LINE__ + 1
-    def #{sym}(&block)                # def html(&block)
-      custom(Mime::#{const}, &block)  #   custom(Mime::HTML, &block)
+  class_eval &lt;&lt;-RUBY, __FILE__, __LINE__ + 1
+    def #{sym}(&amp;block)                # def html(&amp;block)
+      custom(Mime::#{const}, &amp;block)  #   custom(Mime::HTML, &amp;block)
     end                               # end
   RUBY
 end
@@ -136,10 +137,10 @@ Remember back when we were calling <span class='term'>responder.send(type)</span
 The generated methods take an optional block, as shown by the code for <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_responds.rb#L127-137'><span class='term'>custom</span></a>:
 
 <pre>
-def custom(mime_type, &block)
+def custom(mime_type, &amp;block)
   mime_type = mime_type.is_a?(Mime::Type) ? mime_type : Mime::Type.lookup(mime_type.to_s)
 
-  @order << mime_type
+  @order &lt;&lt; mime_type
 
   @responses[mime_type] ||= Proc.new do
     @response.template.template_format = mime_type.to_sym
@@ -172,7 +173,7 @@ When we don't pass a block for the <span class='term'>format.html</span> it will
 @controller.send(:render, :action => @controller.action_name)
 </pre>
 
-It calls <span class='term'>send</span> because <span class='term'>render</span> is a protected method. This passes a single argument to render, <span class='term'>{ :action => @controller.action_name }</span> which in this example is "index". <a href='>http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/base.rb#L859-946'><span class='term'>render</span> is a pretty heavy method</a>, weighing in at close to 100 lines, so I won't bore you with all the details of this method in this post. What I will show you is the part where it processes our <a href=http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/base.rb#L907-908'><span class='term'>action</span> option:
+It calls <span class='term'>send</span> because <span class='term'>render</span> is a protected method. This passes a single argument to render, <span class='term'>{ :action => @controller.action_name }</span> which in this example is "index". <a href='>http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/base.rb#L859-946'><span class='term'>render</span> is a pretty heavy method</a>, weighing in at close to 100 lines, so I won't bore you with all the details of this method in this post. What I will show you is the part where it processes our <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657363f2806/actionpack/lib/action_controller/base.rb#L907-908'><span class='term'>:action</span></a> option:
 
 <pre>
 elsif action_name = options[:action]
@@ -201,7 +202,7 @@ and <a href='http://github.com/rails/rails/blob/a2270ef2594b97891994848138614657
 def template_format
   if defined? @template_format
     @template_format
-  elsif controller && controller.respond_to?(:request)
+  elsif controller &amp;&amp; controller.respond_to?(:request)
     @template_format = controller.request.template_format.to_sym
   else
     @template_format = :html
@@ -240,18 +241,18 @@ def find_template(original_template_path, format = nil, html_fallback = true)
   template_path = original_template_path.sub(/^\//, '')
 
   each do |load_path|
-    if format && (template = load_path["#{template_path}.#{I18n.locale}.#{format}"])
+    if format &amp;&amp; (template = load_path["#{template_path}.#{I18n.locale}.#{format}"])
       return template
-    elsif format && (template = load_path["#{template_path}.#{format}"])
+    elsif format &amp;&amp; (template = load_path["#{template_path}.#{format}"])
       return template
     elsif template = load_path["#{template_path}.#{I18n.locale}"]
       return template
     elsif template = load_path[template_path]
       return template
     # Try to find html version if the format is javascript
-    elsif format == :js && html_fallback && template = load_path["#{template_path}.#{I18n.locale}.html"]
+    elsif format == :js &amp;&amp; html_fallback &amp;&amp; template = load_path["#{template_path}.#{I18n.locale}.html"]
       return template
-    elsif format == :js && html_fallback && template = load_path["#{template_path}.html"]
+    elsif format == :js &amp;&amp; html_fallback &amp;&amp; template = load_path["#{template_path}.html"]
       return template
     end
   end
@@ -271,7 +272,7 @@ Nothing inside the <span class='term'>each</span> block will match, so it will n
 This returns a Template object like this:
 
 <pre>
-#<ActionView::Template:0x2193258 @format=nil, @base_path=nil, @template_path="blogs/", @extension=nil, @locale=nil, @name=nil, @load_path=nil>
+#&lt;ActionView::Template:0x2193258 @format=nil, @base_path=nil, @template_path="blogs/", @extension=nil, @locale=nil, @name=nil, @load_path=nil&gt;
 </pre>
 
 <a href='http://github.com/rails/rails/blob/8fa4275a72c334fe945dada6113fa0153ca28c87/actionpack/lib/action_controller/base.rb#L1239-1243'><span class='term'>render_for_file</span></a> takes this object and uses it to render the appropriate template that the user requested.
