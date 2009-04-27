@@ -1,4 +1,4 @@
-<strong>THIRD DRAFT</strong>
+<strong>FIFTH DRAFT</strong>
  <a href='http://github.com/radar/how-rails-works'>This guide is available on Github</a>
 
 Welcome to yet another guide on my series which I've now named "How Rails Works". My first post in this series was my Timezone Overview for Rails 2.2. Today I would like to cover how mime types and <span class='term'>respond_to</span> work in Rails 2.3. The reason I choose both of these instead of just <span class='term'>respond_to</span> is because they tie in close together. 
@@ -55,11 +55,11 @@ end
   
 which is responsible for loading all your application's initializers, including <em>config/initializers/mime_types.rb</em>.
 
-When you call <span class='term'>respond_to</span> in your controller like this:
+This guide will cover what happens when you call<span class='term'>respond_to</span> in your controller like this:
 
 <pre lang='rails'>
 def index
-  @blogs = Blog.all
+  @blogs = Blog.all(:limit => 10)
   respond_to do |format|
     format.html
     format.xml
@@ -71,9 +71,20 @@ or in the non-block syntax:
 
 <pre lang='rails'>
 def index
-  @blogs = Blog.all
+  @blogs = Blog.all(:limit => 10)
   respond_to :html, :xml
 end    
+</pre>
+
+or call <span class='term'>any</span> on the block's object:
+
+<pre lang='rails'>
+def index
+  respond_to do |format|
+    format.html { @blogs = Blog.all(:limit => 10) }
+    format.any(:atom, :rss) { @blogs = Blog.all }
+  end
+end
 </pre>
 
 The MIME types defined by Rails and your initializers are the methods that you call on the block object <span class='term'>format</span> or the symbols that you pass to respond_to. You may recognise these from the symbols passed to the <span class='term'>Mime::Type.register</span> calls earlier.
@@ -203,9 +214,11 @@ If the first argument given to custom is not a <span class='term'>Mime::Type</sp
 
 <pre>
 def index
+  @blogs = Blog.all(:limit => 10)
   respond_to do |format|
-    format.html
-    format.xml { render :xml => @blogs }
+    format.html 
+    format.json { render :json => @blogs }
+    format.any(:atom, :xml) { @blogs = Blog.all }
   end
 end
 </pre>
@@ -337,6 +350,39 @@ end
 
 This code calls <a href='http://github.com/rails/rails/blob/dd2ed32418a74ca9126834f98a1b0bca926c0c4f/activerecord/lib/active_record/serializers/xml_serializer.rb#L154-157'><span class='term'>to_xml</span></a> on our collection and converts it to an XML document.
 
+Finally, the <a href='http://github.com/rails/rails/blob/4b68debb1c4d3d272b237049c88d01b1eceb58f0/actionpack/lib/action_controller/mime_responds.rb#L139-145'><span class='term'>any</span></a> is another method defined on the <span class='term'>Responder</span> object. You can pass to this a collection of mime types and for these mime types it will perform the block. In this example we've used:
+
+<pre lang='rails'>
+  format.any(:atom, :xml) { @blogs = Blog.all }
+</pre>
+
+<span class='term'>any</span> goes a bit like this:
+
+<pre lang='rails'>
+def any(*args, &amp;block)
+  if args.any?
+    args.each { |type| send(type, &amp;block) }
+  else
+    custom(@mime_type_priority.first, &amp;block)
+  end
+end 
+</pre>
+
+We've passed args to ours, so it'll just call the methods <span class='term'>atom</span> and <span class='term'>xml</span> on the <span class='term'>Responder</span> object and then render the appropriate views for these. 
+
+If we don't pass arguments to <span class='term'>any</span>, any MIME type that we don't have a <span class='term'>respond_to</span> line for will call the <span class='term'>any</span> block instead. Take for example, if we had this:
+
+<pre>
+def index
+  @blogs = Blog.all(:limit => 10)
+  respond_to do |format|
+    format.html 
+    format.json { render :json => @blogs }
+    format.any { @blogs = Blog.all }
+  end
+end
+</pre>
+
+And we requested an XML page, http://localhost:3000/blogs.xml, this will trigger the code in the <span class='term'>any</span> block to be ran.
+
 So that wraps up this guide on respond_to.
-
-
