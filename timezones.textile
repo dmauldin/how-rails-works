@@ -1,0 +1,151 @@
+This is the first post in the How Rails Works series. This post was inspired by a conversation I had with fellow IRC'er fowlduck about timezone issues our apps were encountering.
+
+Timezones depends on the configuration of your applicationm which is set up when you application initializes courtesy of _railties/lib/initializer.rb_ and the +Configuration+ class. This class is defined on "line #649 of _initializer.rb_":http://github.com/rails/rails/blob/2-3-stable/railties/lib/initializer.rb#L649 like this:
+
+<code>
+  class Configuration
+</code>
+
+When you open up the +Rails::Initializer.run+ block in your _config/environment.rb_ the object you're given in the block is a +Configuration+ instance. What's more important in _initializer.rb_ is that inside this +class Configuration+ declaration it defines an +attr_accessor+ for +time_zone+ on "line #827":http://github.com/rails/rails/blob/2-3-stable/railties/lib/initializer.rb#L824-827:
+
+<code>
+# Sets the default +time_zone+.  Setting this will enable +time_zone+
+# awareness for Active Record models and set the Active Record default
+# timezone to <tt>:utc</tt>.
+attr_accessor :time_zone
+</code>
+
+Pay close attention to this comment for this as it explains if you *do not* set this value your Active Record models will *not be timezone aware*. You've been warned. What this +attr_accessor+ does is set up a setter and a getter for an attribute on the +Configuration+ instance. When Rails initializes it reads this method using the +initialize_time_zone+ called on "line #152 of _initializer.rb_":http://github.com/rails/rails/blob/2-3-stable/railties/lib/initializer.rb#L152 and defined on "lines #553-570":http://github.com/rails/rails/blob/2-3-stable/railties/lib/initializer.rb#L553-570 as:
+
+<code>
+def initialize_time_zone
+  if configuration.time_zone
+    zone_default = Time.__send__(:get_zone, configuration.time_zone)
+
+    unless zone_default
+      raise \
+        'Value assigned to config.time_zone not recognized.' +
+        'Run "rake -D time" for a list of tasks for finding appropriate time zone names.'
+    end
+
+    Time.zone_default = zone_default
+
+    if configuration.frameworks.include?(:active_record)
+      ActiveRecord::Base.time_zone_aware_attributes = true
+      ActiveRecord::Base.default_timezone = :utc
+    end
+  end
+end
+</code>
+
+This checks to see if the +time_zone+ attribute on the +configuration+ object is set and if it is will go through the process of setting up the default timezone. This makes a call to the private method +get_zone+ on +Time+ using +__send__+ because calling +send+ will no longer work on Ruby 1.9 for private methods. +get_zone+ is defined on "lines #55-65 of _activesupport/lib/active_support/core_ext/time/zones.rb_":http://github.com/rails/rails/blob/4b68debb1c4d3d272b237049c88d01b1eceb58f0/activesupport/lib/active_support/core_ext/time/zones.rb#L55-65:
+
+<code>
+def get_zone(time_zone)
+  return time_zone if time_zone.nil? || time_zone.is_a?(TimeZone)
+  # lookup timezone based on identifier (unless we've been passed a TZInfo::Timezone)
+  unless time_zone.respond_to?(:period_for_local)
+    time_zone = TimeZone[time_zone] || TZInfo::Timezone.get(time_zone) rescue nil
+  end
+  # Return if a TimeZone instance, or wrap in a TimeZone instance if a TZInfo::Timezone
+  if time_zone
+    time_zone.is_a?(TimeZone) ? time_zone : TimeZone.create(time_zone.name, nil, time_zone)
+  end
+end
+</code>
+
+If the argument +time_zone+ we've passed is +nil+ or a +TimeZone+ object this method will return the +time_zone+ object. If it is not, it will check to see if it +respond_to?+ +period_for_local+ and if it does not then it will call +TimeZone[time_zone]+ and if that returns nil (represented by the +||+) then +TZInfo::Timezone.get(time_zone)+ is called and then if that fails, it will set +time_zone+ to be nil. +[]+ is a method defined on the +TimeZone+ class on "lines #385-395 of _activesupport/lib/active_support/values/time_zone.rb_":http://github.com/rails/rails/blob/4b68debb1c4d3d272b237049c88d01b1eceb58f0/activesupport/lib/active_support/values/time_zone.rb#L385-395:
+
+<code>
+def [](arg)
+  case arg
+    when String
+      ZONES_MAP[arg]
+    when Numeric, ActiveSupport::Duration
+      arg *= 3600 if arg.abs <= 13
+      all.find { |z| z.utc_offset == arg.to_i }
+    else
+      raise ArgumentError, "invalid argument to TimeZone[]: #{arg.inspect}"
+  end
+end
+</code>
+
+If this method is passed a +String+ it will look up the relevant key in +ZONE_MAPS+ which is defined on "lines #385-395 of _activesupport/lib/active_support/values/time_zone.rb_":http://github.com/rails/rails/blob/4b68debb1c4d3d272b237049c88d01b1eceb58f0/activesupport/lib/active_support/values/time_zone.rb#L297-357:
+
+<code>
+ZONES = []
+ZONES_MAP = {}
+[[-39_600, "International Date Line West", "Midway Island", "Samoa" ],
+ [-36_000, "Hawaii" ],
+ [-32_400, "Alaska" ],
+ [-28_800, "Pacific Time (US & Canada)", "Tijuana" ],
+ [-25_200, "Mountain Time (US & Canada)", "Chihuahua", "Mazatlan",
+           "Arizona" ],
+ [-21_600, "Central Time (US & Canada)", "Saskatchewan", "Guadalajara",
+           "Mexico City", "Monterrey", "Central America" ],
+ [-18_000, "Eastern Time (US & Canada)", "Indiana (East)", "Bogota",
+           "Lima", "Quito" ],
+ [-16_200, "Caracas" ],
+ [-14_400, "Atlantic Time (Canada)", "La Paz", "Santiago" ],
+ [-12_600, "Newfoundland" ],
+ [-10_800, "Brasilia", "Buenos Aires", "Georgetown", "Greenland" ],
+ [ -7_200, "Mid-Atlantic" ],
+ [ -3_600, "Azores", "Cape Verde Is." ],
+ [      0, "Dublin", "Edinburgh", "Lisbon", "London", "Casablanca",
+           "Monrovia", "UTC" ],
+ [  3_600, "Belgrade", "Bratislava", "Budapest", "Ljubljana", "Prague",
+           "Sarajevo", "Skopje", "Warsaw", "Zagreb", "Brussels",
+           "Copenhagen", "Madrid", "Paris", "Amsterdam", "Berlin",
+           "Bern", "Rome", "Stockholm", "Vienna",
+           "West Central Africa" ],
+ [  7_200, "Bucharest", "Cairo", "Helsinki", "Kyev", "Riga", "Sofia",
+           "Tallinn", "Vilnius", "Athens", "Istanbul", "Minsk",
+           "Jerusalem", "Harare", "Pretoria" ],
+ [ 10_800, "Moscow", "St. Petersburg", "Volgograd", "Kuwait", "Riyadh",
+           "Nairobi", "Baghdad" ],
+ [ 12_600, "Tehran" ],
+ [ 14_400, "Abu Dhabi", "Muscat", "Baku", "Tbilisi", "Yerevan" ],
+ [ 16_200, "Kabul" ],
+ [ 18_000, "Ekaterinburg", "Islamabad", "Karachi", "Tashkent" ],
+ [ 19_800, "Chennai", "Kolkata", "Mumbai", "New Delhi", "Sri Jayawardenepura" ],
+ [ 20_700, "Kathmandu" ],
+ [ 21_600, "Astana", "Dhaka", "Almaty",
+           "Novosibirsk" ],
+ [ 23_400, "Rangoon" ],
+ [ 25_200, "Bangkok", "Hanoi", "Jakarta", "Krasnoyarsk" ],
+ [ 28_800, "Beijing", "Chongqing", "Hong Kong", "Urumqi",
+           "Kuala Lumpur", "Singapore", "Taipei", "Perth", "Irkutsk",
+           "Ulaan Bataar" ],
+ [ 32_400, "Seoul", "Osaka", "Sapporo", "Tokyo", "Yakutsk" ],
+ [ 34_200, "Darwin", "Adelaide" ],
+ [ 36_000, "Canberra", "Melbourne", "Sydney", "Brisbane", "Hobart",
+           "Vladivostok", "Guam", "Port Moresby" ],
+ [ 39_600, "Magadan", "Solomon Is.", "New Caledonia" ],
+ [ 43_200, "Fiji", "Kamchatka", "Marshall Is.", "Auckland",
+           "Wellington" ],
+ [ 46_800, "Nuku'alofa" ]].
+each do |offset, *places|
+  places.each do |place|
+    place.freeze
+    zone = new(place, offset)
+    ZONES << zone
+    ZONES_MAP[place] = zone
+  end
+end
+ZONES.sort!
+ZONES.freeze
+ZONES_MAP.freeze
+</code>
+
+This defines the +ZONE_MAPS+ hash with the key being the name of the place and the value being the number of seconds the timezone is offset from UTC.
+
+
+This will set the +time_zone+ value to be the Adelaide Time zone, something like: +&lt;ActiveSupport::TimeZone:0x30f4f8 @tzinfo=nil, @name="Adelaide", @utc_offset=34200&gt;+. You don't have to set it to Adelaide, just try your nearest major city and it Should Just Work &trade;. <u>If you <b>don't</b> set this in your <i>config/environment.rb</i> date and time values returned from the database will not be set to whatever time zone you specify.</u>
+
+
+When your application loads it processes the config/environment.rb file and runs the +'initialize_time_zone':"http://github.com/rails/rails/blob/2-2-stable/railties/lib/initializer.rb#L151"+ method which is defined <a href='http://github.com/rails/rails/blob/2-2-stable/railties/lib/initializer.rb#L496-508'>further down</a>.
+This does all kinds of magic! Look at all the pretty sparkles! It firstly checks if you've set a time_zone in your <i>config/environment.rb</i> file and then if you have it sets the default time zone to be what you've specified. Additionally to this, it sets +time_zone_aware_attributes+ to true so that when you do stuff like +Topic.last.created_at+ it'll actually return the time zoned version of that time. It does this by calling into play +<a href='http://github.com/rails/rails/blob/2-2-stable/activerecord/lib/active_record/attribute_methods.rb#L167-177'>define_read_method_for_time_zone_conversion(attr_name)</a>+ (click for juicy details) which either just returns the time or calls +in_time_zone+ on the time returned which converts it into the time zone stored in +Time.zone+ (which is <a href='http://github.com/rails/rails/blob/2-2-stable/activesupport/lib/active_support/core_ext/time/zones.rb#L15'>actually +Thread.current[:time_zone]+</a> if there is one stored there or otherwise the +zone_default+ which was originally set when we called +config.time_zone+! What a mouthful!
+
+By default, ActiveRecord will store timestamps as UTC as shown by +ActiveRecord::Base.default_timezone = :utc+. If you don't specify a time zone in your <i>config/environment.rb</i> this value defaults to :local, so all times will be stored as the local time in your database.
+
+So, assuming you did as the above when you go into your script/console and type: +Topic.last.created_at+ you'll get back the time when the topic was created relative to Adelaide. To change this, just redefine +Time.zone+ by doing +Time.zone= "Paris"+ and then doing +Topic.last.created_at+ will give you time when the topic was created relative to Paris.

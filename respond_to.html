@@ -1,4 +1,4 @@
-<strong>FIFTH DRAFT</strong>
+<strong>FIRST COPY</strong>
  <a href='http://github.com/radar/how-rails-works'>This guide is available on Github</a>
 
 Welcome to yet another guide on my series which I've now named "How Rails Works". My first post in this series was my Timezone Overview for Rails 2.2. Today I would like to cover how mime types and <span class='term'>respond_to</span> work in Rails 2.3. The reason I choose both of these instead of just <span class='term'>respond_to</span> is because they tie in close together. 
@@ -7,7 +7,7 @@ I've tried to make all the methods in this guide clickable with links to the sou
 
 Firstly I'll talk about <a href='http://en.wikipedia.org/wiki/MIME_type'>MIME types</a> in Rails.
 
-The default MIME types are loaded when Rails starts up by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_type.rb#L212'>the final line in <em>actionpack/lib/action_controller/mime_type.rb</em>:
+The default MIME types are loaded when Rails starts up by <a href='http://github.com/rails/rails/blob/35c5727acea882f4cef2a8a2d12d87a8fda045c8/actionpack/lib/action_controller/mime_type.rb#L212'>the final line in <em>actionpack/lib/action_controller/mime_type.rb</em></a>:
 
 <pre>
 require 'action_controller/mime_types'
