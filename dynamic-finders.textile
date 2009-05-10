@@ -1,0 +1,90 @@
+h1. ActiveRecord Dynamic Finders
+ 
+Written by Dave Mauldin
+
+(ed: from Radar: The guide needs to be about dynamic finders in ActiveRecord, specifically find_by_*, find_all_by_*, find_or_initialize_by_*, scoped_by_*)
+
+h2. The Basics
+
+In the simplest case, you can think of dynamic finders as a way to extend the base find to be able to find by something other than the record id.  In a standard REST controller, you'll see finds like this:
+
+<code>
+Item.find(params[:id])--
+</code>
+
+Say you want to find a user by their email address instead of id, then you'd use this:
+
+<code>
+User.find(:first, :conditions => {:email => params[:email]})
+</code>
+
+And of course the shorter way:
+
+<code>
+  User.find_by_email(params[:email])
+</code>
+
+There are some slight differences between these methods: +find_by_*+ will return +nil+, whereas +find+ will raise an +ActiveRecord::RecordNotFound+ if it can't find a matching record.  
+
+Also, +find(1,2,3,4)+ will return 4 records with ids 1, 2, 3 and 4, whereas +find_by_id([1,2,3,4])+ acts like +find(:first, :conditions => {:id => [1,2,3,4]})+ and will only return the first record found.
+
+So just beware that there's more beneath the surface than just rearranging some of the conditions as part of the method name.
+
+Before moving on to the different types of dynamic methods available, we will go over exactly how the simple examples above work internally.  If you've never seen or used missing_method before, you're about to get a crash course...
+
+If you were to call the method +bar+ of the object +foo+, you'd write +foo.bar+.  What this really does is sends the method +bar+ to the object +foo+.  The Ruby interpreter then tries to find a method named +bar+ on the +foo+ object, defined either by its class or its parent classes.  If it can't find a method named +bar+, it will check for a method named +method_missing+.  If that method is present, then it passes in the name of the method it's looking for, along with all of the arguments.
+
+Basically, +method_missing+ is like a catch all method.  If you wrote your method definitions as a +case+ statement, +method_missing+ would be the default case.
+
+This is how dynamic finders work.  They're methods that don't actually exist in your model, but the +method_missing+ method of +ActiveRecord::Base+ can take the information you've given as part of the method name itself and use that to do something useful for you. 
+
+h3. +method_missing+
+
+(ie: we're about to get into ActiveRecord's innards, put your work gloves on)
+
+--- notes and thoughts below
+
+find_or_create_by_* and find_or_initialize_by_
+
+base.rb
+def method_missing(method_id, *arguments, &block)
+  if match = DynamicFinderMatch.match(method_id)
+
+dynamic_finder_match.rb
+def self.match(method)
+  df_match = self.new(method)
+  df_match.finder ? df_match : nil
+end
+
+This calls the initialize method below and then returns a DynamicFinderMatch object that is then used to construct the actual find method with conditions based on the attributes found in the case matches and all of the other options given.
+
+def initialize(method)
+  @finder = :first
+  case method.to_s
+  when /^find_(all_by|last_by|by)_([_a-zA-Z]\w*)$/
+    @finder = :last if $1 == 'last_by'
+    @finder = :all if $1 == 'all_by'
+    names = $2
+  when /^find_by_([_a-zA-Z]\w*)\!$/
+    @bang = true
+    names = $1
+  when /^find_or_(initialize|create)_by_([_a-zA-Z]\w*)$/
+    @instantiator = $1 == 'initialize' ? :new : :create
+    names = $2
+  else
+    @finder = nil
+  end
+  @attribute_names = names && names.split('_and_')
+end
+
+--- comparisons
+
+User.find(:first, :conditions => {:email => params[:email]})
+User.find_by_email(params[:email]) # returns nil if not found
+User.find_by_email!(params[:email]) # raises RecordNotFound if not found
+
+Item.find(:all, :conditions => {:category => params[:category_id]})
+Item.find_all_by_category_id(params[:category_id])
+
+Subscription.find_or_create_by_user_id_and_publication_id(params[:user_id], params[:publication_id])
+Subscription.find(:first, :conditions => {:user_id => params[:user_id], :publication_id => params[:publication_id]}) || Subscription.create(:user_id => params[:user_id], :publication_id => params[:publication_id])
