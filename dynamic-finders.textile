@@ -97,7 +97,7 @@ end
 Now back to that method_missing method that I showed you the first few lines of earlier (documentation comments removed as I explain them here).  If a match is found, an actual method is created in the model class that can be called directly and is called right after its creation.
 
 base.rb
-<code>
+<code><pre>
 def method_missing(method_id, *arguments, &block)
   if match = DynamicFinderMatch.match(method_id)
     attribute_names = match.attribute_names
@@ -127,7 +127,8 @@ def method_missing(method_id, *arguments, &block)
         end
       }, __FILE__, __LINE__
       send(method_id, *arguments)
-</code>
+      ...
+</pre></code>
 
 There is another class_eval right after this one for creating a slightly different method for find_or_create_*.  It does about what you'd expect it to do.  
 
@@ -162,6 +163,7 @@ base.rb
   }, __FILE__, __LINE__
   send(method_id, *arguments, &block)
 </pre></code>
+
 h2. comparisons
 
 <code><pre>
