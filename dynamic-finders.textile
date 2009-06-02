@@ -2,7 +2,7 @@ h1. ActiveRecord Dynamic Finders
  
 Written by Dave Mauldin
 
-(ed-note: from Radar: The guide needs to be about dynamic finders in ActiveRecord, specifically @find_by_&#42;@, @find_all_by_&#42;@, @find_or_initialize_by_&#42;@, @scoped_by_&#42;@)
+(ed-note: from Radar: The guide needs to be about dynamic finders in ActiveRecord, specifically @find_by_*@, @find_all_by_*@, @find_or_initialize_by_*@, @scoped_by_*@)
 
 h2. The Basics
 
@@ -26,7 +26,7 @@ Using dynamic finders, you can write the same find as:
 
 h3. Caveats
 
-There are some slight differences between these methods: @find_by_&#42;@ will return @nil@, whereas @find@ will raise an @ActiveRecord::RecordNotFound@ if it can't find a matching record.  
+There are some slight differences between these methods: @find_by_*@ will return @nil@, whereas @find@ will raise an @ActiveRecord::RecordNotFound@ if it can't find a matching record.  
 
 Also, @find([1,2,3,4])@ will return 4 records with ids 1, 2, 3 and 4, whereas @find_by_id([1,2,3,4])@ acts like @find(:first, :conditions => {:id => [1,2,3,4]})@ and will only return the first record found.
 
@@ -54,7 +54,7 @@ h3. The details
 
 h2. notes and thoughts below
 
-find_or_create_by_&#42; and find_or_initialize_by_&#42;
+@find_or_create_by_*@ and @find_or_initialize_by_*@
 
 base.rb
 <code><pre>
