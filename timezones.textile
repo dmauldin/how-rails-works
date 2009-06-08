@@ -137,7 +137,15 @@ ZONES.freeze
 ZONES_MAP.freeze
 </code>
 
-This defines the +ZONE_MAPS+ hash with the key being the name of the place and the value being the number of seconds the timezone is offset from UTC.
+This defines the +ZONE_MAPS+ hash with the key being the name of the place and the value being the number of seconds the timezone is offset from UTC. It accomplishes this by going through the array defined with the offset and the related places and calls the +new+ method passing in the +place+ and +offset+ variables to it. The +new+ method is one given to you by Ruby and will create a new +TimeZone+ object and then call the +initialize+ method on it. This +initialize+ method is defined on "lines #180-#184 of _activesupport/lib/active_support/values/time_zone.rb_":http://github.com/rails/rails/blob/4b68debb1c4d3d272b237049c88d01b1eceb58f0/activesupport/lib/active_support/values/time_zone.rb#L180-184:
+
+<code>
+  def initialize(name, utc_offset, tzinfo = nil)
+    @name = name
+    @utc_offset = utc_offset
+    @tzinfo = tzinfo
+  end
+</code>
 
 
 This will set the +time_zone+ value to be the Adelaide Time zone, something like: +&lt;ActiveSupport::TimeZone:0x30f4f8 @tzinfo=nil, @name="Adelaide", @utc_offset=34200&gt;+. You don't have to set it to Adelaide, just try your nearest major city and it Should Just Work &trade;. <u>If you <b>don't</b> set this in your <i>config/environment.rb</i> date and time values returned from the database will not be set to whatever time zone you specify.</u>
