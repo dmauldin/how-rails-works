@@ -1,0 +1,158 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN"
+   "http://www.w3.org/TR/html4/strict.dtd">
+
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>untitled</title>
+	<meta name="generator" content="TextMate http://macromates.com/">
+	<meta name="author" content="Ryan Bigg">
+	<!-- Date: 2009-06-08 -->
+	<link rel='stylesheet' href='style.css'>
+</head>
+<body>
+  <div align='center'>
+    <div id='header'>
+    <div id='content'>
+      <h1>ActiveRecord Dynamic Finders<br />
+ <br />
+Written by Dave Mauldin</h1>
+<p>(ed-note: from Radar: The guide needs to be about dynamic finders in ActiveRecord, specifically <code>find_by_*</code>, <code>find_all_by_*</code>, <code>find_or_initialize_by_*</code>, <code>scoped_by_*</code>)</p>
+<h2>The Basics</h2>
+<p>In the simplest case, you can think of dynamic finders as a way to extend ActiveRecord&#8217;s base find to be able to find by something other than the record id.  In a standard <span class="caps">REST</span> controller, you&#8217;ll see finds like this:</p>
+<p><code>
+Item.find(params[:id])
+</code></p>
+<p>Say you want to find a user by their email address instead of id, then you&#8217;d use this:</p>
+<p><code>
+User.find(:first, :conditions =&gt; {:email =&gt; params[:email]})
+</code></p>
+<p>Using dynamic finders, you can write the same find as:</p>
+<p><code>
+  User.find_by_email(params[:email])
+</code></p>
+<h3>Caveats</h3>
+<p>There are some slight differences between these methods: <code>find_by_*</code> will return <code>nil</code>, whereas <code>find</code> will raise an <code>ActiveRecord::RecordNotFound</code> if it can&#8217;t find a matching record.</p>
+<p>Also, <code>find([1,2,3,4])</code> will return 4 records with ids 1, 2, 3 and 4, whereas <code>find_by_id([1,2,3,4])</code> acts like <code>find(:first, :conditions =&gt; {:id =&gt; [1,2,3,4]})</code> and will only return the first record found.</p>
+<p>So just beware that there&#8217;s more beneath the surface than just rearranging some of the conditions as part of the method name.</p>
+<p>Before moving on to all of the different dynamic finders available, we should go over the internal process that makes the examples above work.</p>
+<h2>A glance at the internals</h2>
+<p>If you&#8217;ve looked for these methods in the code or documentation, you may have had a hard time finding them as they don&#8217;t really exist.  I mean, it would be a bit crazy for ActiveRecord to know that your Pizza model should have a <code>find_by_crust_type</code> method, right?  Enter <code>method_missing</code>.</p>
+<h3><code>method_missing</code></h3>
+<p>If you were to call the <code>bar</code> method of the <code>foo</code> object, you&#8217;d write <code>foo.bar</code>.  What this really does is sends the message <code>bar</code> to the object <code>foo</code>.  It can also be written as <code>foo.send('bar')</code>.  When this happens, the Ruby interpreter tries to find a method named <code>bar</code> on the <code>foo</code> object, defined either by its class or its parent classes.  If it can&#8217;t find a method named <code>bar</code>, it will check for a method named <code>method_missing</code>.  If that method is present, then it passes in the name of the method it&#8217;s looking for, along with all of the arguments.</p>
+<p><code>ActiveRecord::Base</code> defines <code>method_missing</code> with a few regular expressions to match the method names for these dynamic finders based on the attribute names of the model you&#8217;re calling them on.  It actually does this using <code>ActiveRecord::DynamicFinderMatch</code> as you&#8217;ll see in the code below.</p>
+<p>Basically, <code>method_missing</code> is a catch all method.  If you wrote your method definitions as a <code>case</code> statement, <code>method_missing</code> would be the default case.  Coincidentally, you&#8217;ll frequently find a <code>case</code> statement inside <code>method_missing</code> definitions.  ;)</p>
+<h3>The details</h3>
+<p>(ie: we&#8217;re about to get into ActiveRecord&#8217;s innards, put your work gloves on)</p>
+<p>&#8230;..  Maybe we should show some of the method missing code here, maybe we should just wait until later when we go over all of the finder types in detail &#8230;..</p>
+<h2>notes and thoughts below</h2>
+<p><code>find_or_create_by_*</code> and <code>find_or_initialize_by_*</code></p>
+<p>base.rb<br />
+<code>&lt;pre&gt;
+def method_missing(method_id, *arguments, &amp;block)
+  if match = DynamicFinderMatch.match(method_id)
+&lt;/pre&gt;</code></p>
+<p>dynamic_finder_match.rb<br />
+<code>&lt;pre&gt;
+def self.match(method)
+  df_match = self.new(method)
+  df_match.finder ? df_match : nil
+end
+&lt;/pre&gt;</code></p>
+<p>This calls the initialize method below that returns a DynamicFinderMatch object with finder, bang, instantiator and attribute_names attributes.</p>
+<p>dynamic_finder_match.rb<br />
+<code>&lt;pre&gt;
+def initialize(method)
+  @finder = :first
+  case method.to_s
+  when /^find_(all_by|last_by|by)_([_a-zA-Z]\w*)$/
+    @finder = :last if $1 == 'last_by'
+    @finder = :all if $1 == 'all_by'
+    names = $2
+  when /^find_by_([_a-zA-Z]\w*)\!$/
+    @bang = true
+    names = $1
+  when /^find_or_(initialize|create)_by_([_a-zA-Z]\w*)$/
+    @instantiator = $1 == 'initialize' ? :new : :create
+    names = $2
+  else
+    @finder = nil
+  end
+  @attribute_names = names &amp;&amp; names.split('_and_')
+end
+&lt;/pre&gt;</code></p>
+<p>Now back to that method_missing method that I showed you the first few lines of earlier (documentation comments removed as I explain them here).  If a match is found, an actual method is created in the model class that can be called directly and is called right after its creation.</p>
+<p>base.rb<br />
+<code>&lt;pre&gt;
+def method_missing(method_id, *arguments, &amp;block)
+  if match = DynamicFinderMatch.match(method_id)
+    attribute_names = match.attribute_names
+    super unless all_attributes_exists?(attribute_names)
+    if match.finder?
+      finder = match.finder
+      bang = match.bang?
+      self.class_eval %{
+        def self.#{method_id}(*args)
+          options = args.extract_options!
+          attributes = construct_attributes_from_arguments(
+            [:#{attribute_names.join(',:')}],
+            args
+          )
+          finder_options = { :conditions =&gt; attributes }
+          validate_find_options(options)
+          set_readonly_option!(options)</p>
+#{&#8217;result = &#8217; if bang}if options[:conditions]
+with_scope(:find =&gt; finder_options) do
+find(:#{finder}, options)
+end
+else
+find(:#{finder}, options.merge(finder_options))
+end
+#{&#8217;result || raise(RecordNotFound, &quot;Couldn\&#8216;t find #{name} with #{attributes.to_a.collect {|pair| &#8220;#{pair.first} = #{pair.second}&#8221;}.join(\&#8217;, \&#8216;)}&quot;)&#8217; if bang}
+end
+}, <i><span class="caps">FILE</span></i>, <i><span class="caps">LINE</span></i>
+send(method_id, *arguments)
+&#8230;
+<p></pre></code></p>
+<p>There is another class_eval right after this one for creating a slightly different method for find_or_create_*.  It does about what you&#8217;d expect it to do.</p>
+<p>base.rb<br />
+<code>&lt;pre&gt;
+  self.class_eval %{
+    def self.#{method_id}(*args)
+      guard_protected_attributes = false</p>
+if args<sup class="footnote"><a href="#fn0">0</a></sup>.is_a?(Hash)
+guard_protected_attributes = true
+attributes = args<sup class="footnote"><a href="#fn0">0</a></sup>.with_indifferent_access
+find_attributes = attributes.slice(*[:#{attribute_names.join(&#8216;,:&#8217;)}])
+else
+find_attributes = attributes = construct_attributes_from_arguments([:#{attribute_names.join(&#8216;,:&#8217;)}], args)
+end
+options = { :conditions =&gt; find_attributes }
+set_readonly_option!(options)
+record = find(:first, options)
+if record.nil?
+record = self.new { |r| r.send(:attributes=, attributes, guard_protected_attributes) }
+#{&#8217;yield(record) if block_given?&#8217;}
+#{&#8217;record.save&#8217; if instantiator == :create}
+record
+else
+record
+end
+end
+}, <i><span class="caps">FILE</span></i>, <i><span class="caps">LINE</span></i>
+send(method_id, *arguments, &amp;block)
+<p></pre></code></p>
+<h2>comparisons</h2>
+<p><code>&lt;pre&gt;
+User.find(:first, :conditions =&gt; {:email =&gt; params[:email]})
+User.find_by_email(params[:email]) # returns nil if not found
+User.find_by_email!(params[:email]) # raises RecordNotFound if not found</p>
+<p>Item.find(:all, :conditions =&gt; {:category =&gt; params[:category_id]})<br />
+Item.find_all_by_category_id(params[:category_id])</p>
+<p>Subscription.find_or_create_by_user_id_and_publication_id(params[:user_id], params[:publication_id])<br />
+Subscription.find(:first, :conditions =&gt; {:user_id =&gt; params[:user_id], :publication_id =&gt; params[:publication_id]}) || Subscription.create(:user_id =&gt; params[:user_id], :publication_id =&gt; params[:publication_id])<br />
+</pre></code></p>
+    </div>
+  </div>
+</body>
+</html>
